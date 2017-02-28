@@ -56,6 +56,11 @@ abstract class MultiplexingXXXSocketSupport
         return clone(p, /* arraycopy */ true);
     }
 
+    long firstPacketReadTime = 0;
+    long numPacketsRead = 0;
+    long numBytesRead = 0;
+    float readRatesBytesPerSecond = 0;
+
     /**
      * Initializes a new <tt>DatagramPacket</tt> instance which is a clone of a
      * specific <tt>DatagramPacket</tt> i.e. the properties of the clone
@@ -638,7 +643,22 @@ abstract class MultiplexingXXXSocketSupport
                         }
                     }
                 }
+                // BRIAN: i think what we want to know here is:
+                // 1) how many times per second is this being called?
+                // 2) how many bytes are we reading each time it gets called?
+                // 3) mainly: how many bytes per second are we reading here?
                 doReceive(c);
+                long currentTime = System.nanoTime();
+                if (firstPacketReadTime == 0) {
+                    firstPacketReadTime = currentTime;
+                }
+                ++numPacketsRead;
+                numBytesRead += c.getLength();
+                if (numPacketsRead % 300 == 0) {
+                    logger.info("BB: MultiplexingXXXSocketSupport " + this.hashCode()
+                            + " reading at a rate of " + numBytesRead / (currentTime - firstPacketReadTime));
+                }
+
 
                 // The caller received from the network. Copy/add the packet to
                 // the receive list of the sockets which accept it.
