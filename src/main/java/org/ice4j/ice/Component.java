@@ -139,7 +139,7 @@ public class Component
      * This is the instance which should be used by applications for
      * reading/writing application data.
      */
-    private final MultiplexingDatagramSocket socket;
+    private final MultiplexingDatagramSocket2 socket;
 
     /**
      * A wrapper around {@link #socket}, kept only to help preserve the old
@@ -185,7 +185,7 @@ public class Component
         try
         {
             componentSocket = new ComponentSocket(this, agentLogger);
-            socket = new MultiplexingDatagramSocket(componentSocket);
+            socket = new MultiplexingDatagramSocket2(componentSocket);
             socketWrapper = new IceUdpSocketWrapper(socket);
         }
         catch (SocketException se)
