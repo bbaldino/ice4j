@@ -20,6 +20,7 @@ package org.ice4j.socket;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
 
 /**
  * Represents a <tt>DatagramSocket</tt> which allows filtering
@@ -40,63 +41,65 @@ public class MultiplexingDatagramSocket
      */
     private final MultiplexingXXXSocketSupport<MultiplexedDatagramSocket>
         multiplexingXXXSocketSupport
-            = new MultiplexingXXXSocketSupport<MultiplexedDatagramSocket>()
-            {
-                /**
-                 * {@inheritDoc}
-                 */
-                @Override
-                protected MultiplexedDatagramSocket createSocket(
-                        DatagramPacketFilter filter)
-                    throws SocketException
-                {
-                    return
-                        new MultiplexedDatagramSocket(
-                                MultiplexingDatagramSocket.this,
-                                filter);
-                }
+        = new MultiplexingXXXSocketSupport<MultiplexedDatagramSocket>()
+    {
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        protected MultiplexedDatagramSocket createSocket(
+            DatagramPacketFilter filter)
+            throws SocketException
+        {
+            return
+                new MultiplexedDatagramSocket(
+                    MultiplexingDatagramSocket.this,
+                    filter);
+        }
 
-                /**
-                 * {@inheritDoc}
-                 */
-                @Override
-                protected void doReceive(DatagramPacket p)
-                    throws IOException
-                {
-                    multiplexingXXXSocketSupportDoReceive(p);
-                }
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        protected void doReceive(DatagramPacket p)
+            throws IOException
+        {
+            multiplexingXXXSocketSupportDoReceive(p);
+        }
 
-                /**
-                 * {@inheritDoc}
-                 */
-                @Override
-                protected void doSetReceiveBufferSize(int receiveBufferSize)
-                    throws SocketException
-                {
-                    multiplexingXXXSocketSupportDoSetReceiveBufferSize(
-                            receiveBufferSize);
-                }
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        protected void doSetReceiveBufferSize(int receiveBufferSize)
+            throws SocketException
+        {
+            multiplexingXXXSocketSupportDoSetReceiveBufferSize(
+                receiveBufferSize);
+        }
 
-                /**
-                 * {@inheritDoc}
-                 */
-                @Override
-                protected List<DatagramPacket> getReceived()
-                {
-                    return received;
-                }
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        protected List<DatagramPacket> getReceived()
+        {
+            return received;
+        }
 
-                /**
-                 * {@inheritDoc}
-                 */
-                @Override
-                protected List<DatagramPacket> getReceived(
-                        MultiplexedDatagramSocket socket)
-                {
-                    return socket.received;
-                }
-            };
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        protected List<DatagramPacket> getReceived(
+            MultiplexedDatagramSocket socket)
+        {
+            return socket.received;
+        }
+    };
 
+    private final ArrayBlockingQueue<DatagramPacket> receivedPackets =
+        new ArrayBlockingQueue<>(100);
     /**
      * The list of <tt>DatagramPacket</tt>s to be received through this
      * <tt>DatagramSocket</tt> i.e. not accepted by the <tt>DatagramFilter</tt>s
@@ -104,17 +107,17 @@ public class MultiplexingDatagramSocket
      */
     private final List<DatagramPacket> received
         = new SocketReceiveBuffer()
-        {
-            private static final long serialVersionUID
-                = 3125772367019091216L;
+    {
+        private static final long serialVersionUID
+            = 3125772367019091216L;
 
-            @Override
-            public int getReceiveBufferSize()
-                throws SocketException
-            {
-                return MultiplexingDatagramSocket.this.getReceiveBufferSize();
-            }
-        };
+        @Override
+        public int getReceiveBufferSize()
+            throws SocketException
+        {
+            return MultiplexingDatagramSocket.this.getReceiveBufferSize();
+        }
+    };
 
     /**
      * Buffer variable for storing the SO_TIMEOUT value set by the
@@ -124,6 +127,11 @@ public class MultiplexingDatagramSocket
      * significantly improve efficiency, at least on some platforms.
      */
     private int soTimeout = 0;
+
+    private Thread readerThread = null;
+    private final ArrayBlockingQueue<DatagramPacket> packetPool =
+        new ArrayBlockingQueue<>(100);
+
 
     /**
      * Initializes a new <tt>MultiplexingDatagramSocket</tt> instance which is
@@ -138,6 +146,7 @@ public class MultiplexingDatagramSocket
     public MultiplexingDatagramSocket()
         throws SocketException
     {
+        startReaderThread();
     }
 
     /**
@@ -154,6 +163,7 @@ public class MultiplexingDatagramSocket
         throws SocketException
     {
         super(delegate);
+        startReaderThread();
     }
 
     /**
@@ -171,6 +181,7 @@ public class MultiplexingDatagramSocket
         throws SocketException
     {
         super(port);
+        startReaderThread();
     }
 
     /**
@@ -190,6 +201,7 @@ public class MultiplexingDatagramSocket
         throws SocketException
     {
         super(port, laddr);
+        startReaderThread();
     }
 
     /**
@@ -211,6 +223,30 @@ public class MultiplexingDatagramSocket
         throws SocketException
     {
         super(bindaddr);
+        startReaderThread();
+    }
+
+    private void startReaderThread()
+    {
+        readerThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    DatagramPacket packet = packetPool.poll();
+                    if (packet == null) {
+                        byte[] buf = new byte[1500];
+                        packet = new DatagramPacket(buf, buf.length);
+                    }
+                    try {
+                        MultiplexingDatagramSocket.super.receive(packet);
+                    } catch (IOException e) {
+
+                    }
+                    receivedPackets.offer(packet);
+                }
+            }
+        });
+        readerThread.start();
     }
 
     /**
@@ -266,8 +302,8 @@ public class MultiplexingDatagramSocket
      * fails.
      */
     public MultiplexedDatagramSocket getSocket(
-            DatagramPacketFilter filter,
-            boolean create)
+        DatagramPacketFilter filter,
+        boolean create)
         throws SocketException
     {
         return multiplexingXXXSocketSupport.getSocket(filter, create);
@@ -312,7 +348,7 @@ public class MultiplexingDatagramSocket
      * such as a UDP error
      */
     private void multiplexingXXXSocketSupportDoSetReceiveBufferSize(
-            int receiveBufferSize)
+        int receiveBufferSize)
         throws SocketException
     {
         super.setReceiveBufferSize(receiveBufferSize);
@@ -344,7 +380,18 @@ public class MultiplexingDatagramSocket
     public void receive(DatagramPacket p)
         throws IOException
     {
-        multiplexingXXXSocketSupport.receive(received, p, soTimeout);
+        DatagramPacket received = null;
+        try {
+            received = receivedPackets.take();
+        } catch (InterruptedException e) {
+            received = null;
+        }
+        if (received != null)
+        {
+            MultiplexingXXXSocketSupport.copy(received, p);
+        }
+
+        //multiplexingXXXSocketSupport.receive(received, p, soTimeout);
     }
 
     /**
@@ -362,9 +409,9 @@ public class MultiplexingDatagramSocket
         throws IOException
     {
         multiplexingXXXSocketSupport.receive(
-                multiplexed.received,
-                p,
-                multiplexed.getSoTimeout());
+            multiplexed.received,
+            p,
+            multiplexed.getSoTimeout());
     }
 
     /**
