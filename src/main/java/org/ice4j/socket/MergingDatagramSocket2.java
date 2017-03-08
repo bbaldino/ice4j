@@ -736,8 +736,8 @@ public class MergingDatagramSocket2
     private Buffer getFreeBuffer()
     {
       Buffer buffer = pool.poll();
-      //if (buffer == null)
-      //  buffer = new Buffer();
+      if (buffer == null)
+        buffer = new Buffer();
       buffer.reset();
       return buffer;
     }
