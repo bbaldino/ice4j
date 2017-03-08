@@ -95,6 +95,9 @@ public class Logger
     {
         Level currentLevel
             = levelDelegate != null ? levelDelegate.getLevel() : this.level;
+        if (currentLevel == null) {
+            return false;
+        }
         int levelValue = currentLevel.intValue();
 
         return level.intValue() >= levelValue
