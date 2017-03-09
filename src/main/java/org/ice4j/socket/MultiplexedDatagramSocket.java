@@ -21,6 +21,7 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Represents a <tt>DatagramSocket</tt> which receives <tt>DatagramPacket</tt>s
@@ -160,7 +161,7 @@ public class MultiplexedDatagramSocket
     {
         DatagramPacket rx = null;
         try {
-            rx = receivedPackets.take();
+            rx = receivedPackets.poll(getSoTimeout(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e)
         {
             p = null;

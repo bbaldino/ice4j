@@ -21,6 +21,7 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Represents a <tt>DatagramSocket</tt> which allows filtering
@@ -50,6 +51,14 @@ public class MultiplexingDatagramSocket
      *  packets out to the MultiplexedSockets
      */
     Thread multiplexerThread = null;
+
+    private int soTimeout = 0;
+
+    @Override
+    public int getSoTimeout()
+    {
+        return soTimeout;
+    }
 
     /**
      * List of multiplexed sockets that have been created with filters
@@ -342,7 +351,7 @@ public class MultiplexingDatagramSocket
     {
         DatagramPacket rx = null;
         try {
-            rx = unMultiplexedPackets.take();
+            rx = unMultiplexedPackets.poll(soTimeout, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e)
         {
             p = null;
@@ -368,5 +377,13 @@ public class MultiplexingDatagramSocket
         throws IOException
     {
         multiplexed.receive(p);
+    }
+
+    @Override
+    public void setSoTimeout(int timeout)
+        throws SocketException
+    {
+        super.setSoTimeout(timeout);
+        soTimeout = timeout;
     }
 }
