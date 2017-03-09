@@ -25,8 +25,8 @@ public class MultiplexingDatagramSocket
     }
   };
 
-  Object inReceiveLock = new Object();
-  boolean inReceive;
+  Object receiveLock = new Object();
+  boolean doingReceive;
   private boolean setReceiveBufferSize = false;
   private int receiveBufferSize;
 
@@ -140,16 +140,16 @@ public class MultiplexingDatagramSocket
       }
 
       boolean wait;
-      synchronized(inReceiveLock)
+      synchronized(receiveLock)
       {
-        if (inReceive)
+        if (doingReceive)
         {
           wait = true;
         }
         else
         {
           wait = false;
-          inReceive = true;
+          doingReceive = true;
         }
       }
       try
@@ -176,7 +176,7 @@ public class MultiplexingDatagramSocket
         }
 
         DatagramPacket c = MultiplexingXXXSocketSupport.clone(p, false);
-        synchronized(inReceiveLock)
+        synchronized(receiveLock)
         {
           if (setReceiveBufferSize)
           {
@@ -194,46 +194,57 @@ public class MultiplexingDatagramSocket
           }
         }
         super.receive(c);
-        synchronized (sockets)
-        {
-          boolean accepted = false;
-          for (MultiplexedDatagramSocket socket : sockets)
-          {
-            if (socket.getFilter().accept(c))
-            {
-              List<DatagramPacket> socketReceived = socket.received;
-              synchronized(socketReceived)
-              {
-                socketReceived.add(accepted ? MultiplexingXXXSocketSupport.clone(c, true) : c);
-                socketReceived.notifyAll();
-              }
-              accepted = true;
-            }
-          }
-          if (!accepted)
-          {
-            synchronized(received)
-            {
-              received.add(c);
-              received.notifyAll();
-            }
-          }
-        }
+        acceptBySocketsOrThis(c);
       }
       finally
       {
-        synchronized(inReceiveLock)
+        synchronized(receiveLock)
         {
           if (!wait)
           {
-            inReceive = false;
+            doingReceive = false;
           }
         }
       }
-    }
-    while(true);
+    } while(true);
     MultiplexingXXXSocketSupport.copy(r, p);
-    
+  }
+
+  private void acceptBySocketsOrThis(DatagramPacket p)
+  {
+    synchronized (sockets)
+    {
+      boolean accepted = false;
+
+      for (MultiplexedDatagramSocket socket : sockets)
+      {
+        if (socket.getFilter().accept(p))
+        {
+          List<DatagramPacket> socketReceived = socket.received;
+
+          synchronized (socketReceived)
+          {
+            socketReceived.add(
+                accepted ? MultiplexingXXXSocketSupport.clone(p, /* arraycopy */ true) : p);
+            socketReceived.notifyAll();
+          }
+          accepted = true;
+
+          // Emil Ivov: Don't break because we want all
+          // filtering sockets to get the received packet.
+        }
+      }
+      if (!accepted)
+      {
+        List<DatagramPacket> thisReceived = received;
+
+        synchronized (thisReceived)
+        {
+          thisReceived.add(p);
+          thisReceived.notifyAll();
+        }
+      }
+    }
   }
 
   @Override
@@ -253,11 +264,10 @@ public class MultiplexingDatagramSocket
   public void setReceiveBufferSize(int receiveBufferSize)
       throws SocketException
   {
-    //multiplexingXXXSocketSupport.setReceiveBufferSize(receiveBufferSize);
-    synchronized (inReceiveLock)
+    synchronized (receiveLock)
     {
       this.receiveBufferSize = receiveBufferSize;
-      if (inReceive)
+      if (doingReceive)
       {
         setReceiveBufferSize = true;
       }
