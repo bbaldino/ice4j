@@ -70,7 +70,7 @@ abstract class MultiplexingXXXSocketSupport
      * @return a new <tt>DatagramPacket</tt> instance which is a clone of the
      * specified <tt>DatagramPacket</tt>
      */
-    private static DatagramPacket clone(DatagramPacket p, boolean arraycopy)
+    public static DatagramPacket clone(DatagramPacket p, boolean arraycopy)
     {
         byte[] data;
         int off;
