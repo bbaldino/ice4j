@@ -20,6 +20,7 @@ package org.ice4j.socket;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
 
 /**
  * Represents a <tt>DatagramSocket</tt> which receives <tt>DatagramPacket</tt>s
@@ -43,6 +44,9 @@ public class MultiplexedDatagramSocket
      * are to be received through this instance.
      */
     private final DatagramPacketFilter filter;
+
+    public ArrayBlockingQueue<DatagramPacket> receivedPackets =
+        new ArrayBlockingQueue<DatagramPacket>(100);
 
     /**
      * The <tt>MultiplexingDatagramSocket</tt> which does the actual reading
@@ -154,6 +158,16 @@ public class MultiplexedDatagramSocket
     public void receive(DatagramPacket p)
         throws IOException
     {
-        multiplexing.receive(this, p);
+        DatagramPacket rx = null;
+        try {
+            rx = receivedPackets.take();
+        } catch (InterruptedException e)
+        {
+            p = null;
+        }
+        if (p != null)
+        {
+            MultiplexingXXXSocketSupport.copy(rx, p);
+        }
     }
 }

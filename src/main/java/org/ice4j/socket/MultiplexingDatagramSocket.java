@@ -20,6 +20,7 @@ package org.ice4j.socket;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
 
 /**
  * Represents a <tt>DatagramSocket</tt> which allows filtering
@@ -33,97 +34,24 @@ import java.util.*;
 public class MultiplexingDatagramSocket
     extends SafeCloseDatagramSocket
 {
+    ArrayBlockingQueue<DatagramPacket> receivedPackets =
+        new ArrayBlockingQueue<DatagramPacket>(10000);
     /**
-     * The {@code MultiplexingXXXSocketSupport} which implements functionality
-     * common to TCP and UDP sockets in order to facilitate implementers such as
-     * this instance.
+     * The thread that does the call to receive on the actual underlying socket
+     *  and puts packets in the receivedPackets queue
      */
-    private final MultiplexingXXXSocketSupport<MultiplexedDatagramSocket>
-        multiplexingXXXSocketSupport
-            = new MultiplexingXXXSocketSupport<MultiplexedDatagramSocket>()
-            {
-                /**
-                 * {@inheritDoc}
-                 */
-                @Override
-                protected MultiplexedDatagramSocket createSocket(
-                        DatagramPacketFilter filter)
-                    throws SocketException
-                {
-                    return
-                        new MultiplexedDatagramSocket(
-                                MultiplexingDatagramSocket.this,
-                                filter);
-                }
-
-                /**
-                 * {@inheritDoc}
-                 */
-                @Override
-                protected void doReceive(DatagramPacket p)
-                    throws IOException
-                {
-                    multiplexingXXXSocketSupportDoReceive(p);
-                }
-
-                /**
-                 * {@inheritDoc}
-                 */
-                @Override
-                protected void doSetReceiveBufferSize(int receiveBufferSize)
-                    throws SocketException
-                {
-                    multiplexingXXXSocketSupportDoSetReceiveBufferSize(
-                            receiveBufferSize);
-                }
-
-                /**
-                 * {@inheritDoc}
-                 */
-                @Override
-                protected List<DatagramPacket> getReceived()
-                {
-                    return received;
-                }
-
-                /**
-                 * {@inheritDoc}
-                 */
-                @Override
-                protected List<DatagramPacket> getReceived(
-                        MultiplexedDatagramSocket socket)
-                {
-                    return socket.received;
-                }
-            };
+    Thread receiverThread = null;
+    /**
+     * The thread which reads from the receivedPackets queue and multiplexes
+     *  packets out to the MultiplexedSockets
+     */
+    Thread multiplexerThread = null;
 
     /**
-     * The list of <tt>DatagramPacket</tt>s to be received through this
-     * <tt>DatagramSocket</tt> i.e. not accepted by the <tt>DatagramFilter</tt>s
-     * of {@link #sockets} at the time of the reading from the network.
+     * List of multiplexed sockets that have been created with filters
      */
-    private final List<DatagramPacket> received
-        = new SocketReceiveBuffer()
-        {
-            private static final long serialVersionUID
-                = 3125772367019091216L;
-
-            @Override
-            public int getReceiveBufferSize()
-                throws SocketException
-            {
-                return MultiplexingDatagramSocket.this.getReceiveBufferSize();
-            }
-        };
-
-    /**
-     * Buffer variable for storing the SO_TIMEOUT value set by the
-     * last <tt>setSoTimeout()</tt> call. Although not strictly needed,
-     * getting the locally stored value as opposed to retrieving it
-     * from a parent <tt>getSoTimeout()</tt> call seems to
-     * significantly improve efficiency, at least on some platforms.
-     */
-    private int soTimeout = 0;
+    private List<MultiplexedDatagramSocket> multiplexedSockets =
+        new ArrayList<>();
 
     /**
      * Initializes a new <tt>MultiplexingDatagramSocket</tt> instance which is
@@ -138,6 +66,7 @@ public class MultiplexingDatagramSocket
     public MultiplexingDatagramSocket()
         throws SocketException
     {
+        startReceiverThread();
     }
 
     /**
@@ -154,6 +83,7 @@ public class MultiplexingDatagramSocket
         throws SocketException
     {
         super(delegate);
+        startReceiverThread();
     }
 
     /**
@@ -171,6 +101,7 @@ public class MultiplexingDatagramSocket
         throws SocketException
     {
         super(port);
+        startReceiverThread();
     }
 
     /**
@@ -190,6 +121,7 @@ public class MultiplexingDatagramSocket
         throws SocketException
     {
         super(port, laddr);
+        startReceiverThread();
     }
 
     /**
@@ -211,6 +143,66 @@ public class MultiplexingDatagramSocket
         throws SocketException
     {
         super(bindaddr);
+        startReceiverThread();
+    }
+
+    private void startReceiverThread() {
+        receiverThread = new Thread(new Runnable()
+        {
+            @Override
+            public void run() {
+                while (true)
+                {
+                    //System.out.println("MultiplexingDatagramSocket inner receive loop");
+                    byte[] buf = new byte[1500];
+                    DatagramPacket p = new DatagramPacket(buf, buf.length);
+                    try {
+                        MultiplexingDatagramSocket.super.receive(p);
+                    } catch (IOException e) {
+                        //System.out.println("MultiplexingDatagramSocket inner receive loop: exception");
+                        continue;
+                    }
+                    //System.out.println("MultiplexingDatagramSocket inner receive loop: received");
+                    receivedPackets.add(p);
+                }
+            }
+        });
+        receiverThread.start();
+        startMultiplexerThread();
+        System.out.println("Started receiver thread");
+    }
+
+    private void startMultiplexerThread() {
+        multiplexerThread = new Thread(new Runnable()
+        {
+            @Override
+            public void run() {
+                while (true) {
+                    DatagramPacket p = null;
+                    try {
+                        p = receivedPackets.take();
+                    } catch (InterruptedException e) {
+                        continue;
+                    }
+                    //System.out.println("Multiplexer thread: read");
+                    synchronized(multiplexedSockets)
+                    {
+                        for (MultiplexedDatagramSocket multiplexedSocket : multiplexedSockets)
+                        {
+                            DatagramPacketFilter filter = multiplexedSocket.getFilter();
+                            if (filter.accept(p))
+                            {
+                                multiplexedSocket.receivedPackets.offer(MultiplexingXXXSocketSupport.clone(p, true));
+                            }
+                        }
+                        //TODO: old code kept anything that didn't match in a central queue that could be used to fill
+                        // into multiplexed queues as they were created...for now i'm just gonna drop 'em.
+                    }
+
+                }
+            }
+        });
+        multiplexerThread.start();
     }
 
     /**
@@ -221,7 +213,10 @@ public class MultiplexingDatagramSocket
      */
     void close(MultiplexedDatagramSocket multiplexed)
     {
-        multiplexingXXXSocketSupport.close(multiplexed);
+        synchronized(multiplexedSockets)
+        {
+            multiplexedSockets.remove(multiplexed);
+        }
     }
 
     /**
@@ -270,52 +265,24 @@ public class MultiplexingDatagramSocket
             boolean create)
         throws SocketException
     {
-        return multiplexingXXXSocketSupport.getSocket(filter, create);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public int getSoTimeout()
-    {
-        return soTimeout;
-    }
-
-    /**
-     * Implements {@link MultiplexingXXXSocketSupport#doReceive(DatagramPacket)}
-     * on behalf of {@link #multiplexingXXXSocketSupport}. Receives a
-     * {@code DatagramPacket} from this socket.
-     *
-     * @param p the {@code DatagramPacket} into which to place the incoming data
-     * @throws IOException if an I/O error occurs
-     */
-    private void multiplexingXXXSocketSupportDoReceive(DatagramPacket p)
-        throws IOException
-    {
-        super.receive(p);
-    }
-
-    /**
-     * Implements
-     * {@link MultiplexingXXXSocketSupport#doSetReceiveBufferSize(int)} on
-     * behalf of {@link #multiplexingXXXSocketSupport}. Sets the
-     * {@code SO_RCVBUF} option to the specified value for this
-     * {@code DatagramSocket}. The {@code SO_RCVBUF} option is used by the
-     * network implementation as a hint to size the underlying network I/O
-     * buffers. The {@code SO_RCVBUF} setting may also be used by the network
-     * implementation to determine the maximum size of the packet that can be
-     * received on this socket.
-     *
-     * @param receiveBufferSize the size to which to set the receive buffer size
-     * @throws SocketException if there is an error in the underlying protocol,
-     * such as a UDP error
-     */
-    private void multiplexingXXXSocketSupportDoSetReceiveBufferSize(
-            int receiveBufferSize)
-        throws SocketException
-    {
-        super.setReceiveBufferSize(receiveBufferSize);
+        synchronized(multiplexedSockets)
+        {
+            for (MultiplexedDatagramSocket socket : multiplexedSockets)
+            {
+                if (socket.getFilter().equals(filter))
+                {
+                    return socket;
+                }
+            }
+            if (!create)
+            {
+                return null;
+            }
+            MultiplexedDatagramSocket multiplexedDatagramSocket =
+                new MultiplexedDatagramSocket(this, filter);
+            multiplexedSockets.add(multiplexedDatagramSocket);
+            return multiplexedDatagramSocket;
+        }
     }
 
     /**
@@ -344,7 +311,14 @@ public class MultiplexingDatagramSocket
     public void receive(DatagramPacket p)
         throws IOException
     {
-        multiplexingXXXSocketSupport.receive(received, p, soTimeout);
+        // I don't get what calls receive on this directly (as opposed to a created
+        //  multiplexed socket).  seems like this defeats the purpose and shouldn't
+        //  even exist?
+        System.out.println("BB: DIRECT CALL TO RECEIVE ON MULTIPLEXINGDATAGRAMSOCKET");
+        for (StackTraceElement ste : Thread.currentThread().getStackTrace()) {
+            System.out.println(ste);
+        }
+        throw new IOException();
     }
 
     /**
@@ -361,31 +335,6 @@ public class MultiplexingDatagramSocket
     void receive(MultiplexedDatagramSocket multiplexed, DatagramPacket p)
         throws IOException
     {
-        multiplexingXXXSocketSupport.receive(
-                multiplexed.received,
-                p,
-                multiplexed.getSoTimeout());
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void setReceiveBufferSize(int receiveBufferSize)
-        throws SocketException
-    {
-        multiplexingXXXSocketSupport.setReceiveBufferSize(receiveBufferSize);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void setSoTimeout(int timeout)
-        throws SocketException
-    {
-        super.setSoTimeout(timeout);
-
-        soTimeout = timeout;
+        multiplexed.receive(p);
     }
 }
