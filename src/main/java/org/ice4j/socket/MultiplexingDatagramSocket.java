@@ -3,6 +3,8 @@ package org.ice4j.socket;
 import java.io.IOException;
 import java.net.*;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 
 /**
@@ -93,8 +95,66 @@ public class MultiplexingDatagramSocket
         return null;
       }
       MultiplexedDatagramSocket socket = new MultiplexedDatagramSocket(this, filter);
-      sockets.add(socket);
+      if (socket != null)
+      {
+        sockets.add(socket);
+        moveReceivedFromThisToSocket(socket);
+      }
       return socket;
+    }
+  }
+
+  private void moveReceivedFromThisToSocket(MultiplexedDatagramSocket socket)
+  {
+    // Pull the packets which have been received already and are accepted by
+    // the specified multiplexed socket out of the multiplexing socket.
+    List<DatagramPacket> thisReceived = received;
+    DatagramPacketFilter socketFilter = socket.getFilter();
+    List<DatagramPacket> toMove = null;
+
+    synchronized (thisReceived)
+    {
+      if (thisReceived.isEmpty())
+      {
+        return;
+      }
+      else
+      {
+        for (Iterator<DatagramPacket> i = thisReceived.iterator();
+             i.hasNext();)
+        {
+          DatagramPacket p = i.next();
+
+          if (socketFilter.accept(p))
+          {
+            if (toMove == null)
+              toMove = new LinkedList<>();
+            toMove.add(p);
+
+            // XXX In the method receive, we allow multiple filters
+            // to accept one and the same packet.
+            i.remove();
+          }
+        }
+      }
+    }
+
+    // Push the packets which have been accepted already and are accepted by
+    // the specified multiplexed socket into the multiplexed socket in
+    // question.
+    if (toMove != null)
+    {
+      List<DatagramPacket> socketReceived = socket.received;
+
+      synchronized (socketReceived)
+      {
+        socketReceived.addAll(toMove);
+        // The notifyAll will practically likely be unnecessary because
+        // the specified socket will likely be a newly-created one to
+        // which noone else has a reference. Anyway, dp the invocation
+        // for the purposes of consistency, clarity, and such.
+        socketReceived.notifyAll();
+      }
     }
   }
 
@@ -176,6 +236,7 @@ public class MultiplexingDatagramSocket
         }
 
         DatagramPacket c = MultiplexingXXXSocketSupport.clone(p, false);
+        /*
         synchronized(receiveLock)
         {
           if (setReceiveBufferSize)
@@ -193,6 +254,7 @@ public class MultiplexingDatagramSocket
             }
           }
         }
+        */
         super.receive(c);
         acceptBySocketsOrThis(c);
       }
