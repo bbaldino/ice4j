@@ -35,11 +35,11 @@ public class MultiplexingDatagramSocket
     extends SafeCloseDatagramSocket
 {
     ArrayBlockingQueue<DatagramPacket> receivedPackets =
-        new ArrayBlockingQueue<DatagramPacket>(10000);
+        new ArrayBlockingQueue<DatagramPacket>(100);
     ArrayBlockingQueue<DatagramPacket> unMultiplexedPackets =
-        new ArrayBlockingQueue<DatagramPacket>(1000);
+        new ArrayBlockingQueue<DatagramPacket>(100);
     ArrayBlockingQueue<DatagramPacket> packetPool =
-        new ArrayBlockingQueue<DatagramPacket>(10000);
+        new ArrayBlockingQueue<DatagramPacket>(100);
     /**
      * The thread that does the call to receive on the actual underlying socket
      *  and puts packets in the receivedPackets queue
@@ -226,6 +226,7 @@ public class MultiplexingDatagramSocket
                         packetPool.offer(p);
                     }
 
+                    packetAccepted = false;
                 }
             }
         });
