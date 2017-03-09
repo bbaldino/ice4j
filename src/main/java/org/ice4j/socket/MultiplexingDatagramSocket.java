@@ -36,6 +36,10 @@ public class MultiplexingDatagramSocket
 {
     ArrayBlockingQueue<DatagramPacket> receivedPackets =
         new ArrayBlockingQueue<DatagramPacket>(10000);
+    ArrayBlockingQueue<DatagramPacket> unMultiplexedPackets =
+        new ArrayBlockingQueue<DatagramPacket>(1000);
+    ArrayBlockingQueue<DatagramPacket> packetPool =
+        new ArrayBlockingQueue<DatagramPacket>(10000);
     /**
      * The thread that does the call to receive on the actual underlying socket
      *  and puts packets in the receivedPackets queue
@@ -146,6 +150,17 @@ public class MultiplexingDatagramSocket
         startReceiverThread();
     }
 
+    private DatagramPacket getFreePacket()
+    {
+        DatagramPacket p = packetPool.poll();
+        if (p == null)
+        {
+            byte[] buf = new byte[1500];
+            p = new DatagramPacket(buf, buf.length);
+        }
+        return p;
+    }
+
     private void startReceiverThread() {
         receiverThread = new Thread(new Runnable()
         {
@@ -154,8 +169,9 @@ public class MultiplexingDatagramSocket
                 while (true)
                 {
                     //System.out.println("MultiplexingDatagramSocket inner receive loop");
-                    byte[] buf = new byte[1500];
-                    DatagramPacket p = new DatagramPacket(buf, buf.length);
+                    //byte[] buf = new byte[1500];
+                    //DatagramPacket p = new DatagramPacket(buf, buf.length);
+                    DatagramPacket p = getFreePacket();
                     try {
                         MultiplexingDatagramSocket.super.receive(p);
                     } catch (IOException e) {
@@ -163,10 +179,11 @@ public class MultiplexingDatagramSocket
                         continue;
                     }
                     //System.out.println("MultiplexingDatagramSocket inner receive loop: received");
-                    receivedPackets.add(p);
+                    receivedPackets.offer(p);
                 }
             }
         });
+        receiverThread.setName("MultiplexingDatagramSocket@" + hashCode() + " receiverThread");
         receiverThread.start();
         startMultiplexerThread();
         System.out.println("Started receiver thread");
@@ -175,6 +192,7 @@ public class MultiplexingDatagramSocket
     private void startMultiplexerThread() {
         multiplexerThread = new Thread(new Runnable()
         {
+            boolean packetAccepted = false;
             @Override
             public void run() {
                 while (true) {
@@ -193,15 +211,25 @@ public class MultiplexingDatagramSocket
                             if (filter.accept(p))
                             {
                                 multiplexedSocket.receivedPackets.offer(MultiplexingXXXSocketSupport.clone(p, true));
+                                packetAccepted = true;
                             }
                         }
                         //TODO: old code kept anything that didn't match in a central queue that could be used to fill
                         // into multiplexed queues as they were created...for now i'm just gonna drop 'em.
                     }
+                    if (!packetAccepted)
+                    {
+                        unMultiplexedPackets.offer(MultiplexingXXXSocketSupport.clone(p, true));
+                    }
+                    if (p != null)
+                    {
+                        packetPool.offer(p);
+                    }
 
                 }
             }
         });
+        multiplexerThread.setName("MultiplexingDatagramSocket@" + hashCode() + " multiplexerThread");
         multiplexerThread.start();
     }
 
@@ -311,14 +339,17 @@ public class MultiplexingDatagramSocket
     public void receive(DatagramPacket p)
         throws IOException
     {
-        // I don't get what calls receive on this directly (as opposed to a created
-        //  multiplexed socket).  seems like this defeats the purpose and shouldn't
-        //  even exist?
-        System.out.println("BB: DIRECT CALL TO RECEIVE ON MULTIPLEXINGDATAGRAMSOCKET");
-        for (StackTraceElement ste : Thread.currentThread().getStackTrace()) {
-            System.out.println(ste);
+        DatagramPacket rx = null;
+        try {
+            rx = unMultiplexedPackets.take();
+        } catch (InterruptedException e)
+        {
+            p = null;
         }
-        throw new IOException();
+        if (p != null)
+        {
+            MultiplexingXXXSocketSupport.copy(rx, p);
+        }
     }
 
     /**
