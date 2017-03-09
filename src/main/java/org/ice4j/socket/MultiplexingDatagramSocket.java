@@ -173,10 +173,12 @@ public class MultiplexingDatagramSocket
     private void startReceiverThread() {
         receiverThread = new Thread(new Runnable()
         {
+            boolean packetAccepted = false;
             @Override
             public void run() {
                 while (true)
                 {
+                    packetAccepted = false;
                     //System.out.println("MultiplexingDatagramSocket inner receive loop");
                     //byte[] buf = new byte[1500];
                     //DatagramPacket p = new DatagramPacket(buf, buf.length);
@@ -187,14 +189,29 @@ public class MultiplexingDatagramSocket
                         //System.out.println("MultiplexingDatagramSocket inner receive loop: exception");
                         continue;
                     }
-                    //System.out.println("MultiplexingDatagramSocket inner receive loop: received");
-                    receivedPackets.offer(p);
+                    synchronized(multiplexedSockets)
+                    {
+                        for (MultiplexedDatagramSocket multiplexedSocket : multiplexedSockets)
+                        {
+                            DatagramPacketFilter filter = multiplexedSocket.getFilter();
+                            if (filter.accept(p))
+                            {
+                                multiplexedSocket.receivedPackets.offer(MultiplexingXXXSocketSupport.clone(p, true));
+                                packetAccepted = true;
+                            }
+                        }
+                    }
+                    if (!packetAccepted)
+                    {
+                        receivedPackets.offer(MultiplexingXXXSocketSupport.clone(p, true));
+                    }
+                    packetPool.offer(p);
                 }
             }
         });
         receiverThread.setName("MultiplexingDatagramSocket@" + hashCode() + " receiverThread");
         receiverThread.start();
-        startMultiplexerThread();
+        //startMultiplexerThread();
         System.out.println("Started receiver thread");
     }
 
@@ -351,15 +368,12 @@ public class MultiplexingDatagramSocket
     {
         DatagramPacket rx = null;
         try {
-            rx = unMultiplexedPackets.poll(soTimeout, TimeUnit.MILLISECONDS);
+            rx = receivedPackets.take();
         } catch (InterruptedException e)
         {
-            p = null;
+            return;
         }
-        if (p != null)
-        {
-            MultiplexingXXXSocketSupport.copy(rx, p);
-        }
+        MultiplexingXXXSocketSupport.copy(rx, p);
     }
 
     /**

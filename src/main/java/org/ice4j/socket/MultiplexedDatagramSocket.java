@@ -166,7 +166,7 @@ public class MultiplexedDatagramSocket
         {
             p = null;
         }
-        if (p != null)
+        if (rx != null)
         {
             MultiplexingXXXSocketSupport.copy(rx, p);
         }
