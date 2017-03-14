@@ -17,6 +17,7 @@ public class MultiplexingDatagramSocket
 
   ArrayBlockingQueue<DatagramPacket> received
           = new ArrayBlockingQueue<>(100);
+  int numDroppedPackets = 0;
   /*
   private final List<DatagramPacket> received
       = new SocketReceiveBuffer()
@@ -328,33 +329,39 @@ public class MultiplexingDatagramSocket
 
   private void acceptBySocketsOrThis(DatagramPacket p)
   {
-    synchronized (sockets)
-    {
       boolean accepted = false;
-
-      for (MultiplexedDatagramSocket socket : sockets)
+      synchronized (sockets)
       {
-        if (socket.getFilter().accept(p))
-        {
-          //List<DatagramPacket> socketReceived = socket.received;
-          ArrayBlockingQueue<DatagramPacket> socketReceived = socket.received;
+          for (MultiplexedDatagramSocket socket : sockets)
+          {
+              if (socket.getFilter().accept(p))
+              {
+                  //List<DatagramPacket> socketReceived = socket.received;
+                  ArrayBlockingQueue<DatagramPacket> socketReceived = socket.received;
 
-          socketReceived.offer(accepted ? MultiplexingXXXSocketSupport.clone(p, /* arraycopy */ true) : p);
+                  if (!socketReceived.offer(accepted ? MultiplexingXXXSocketSupport.clone(p, /* arraycopy */ true) : p))
+                  {
+                      ++numDroppedPackets;
+                  }
 //          synchronized (socketReceived)
 //          {
 //            socketReceived.add(
 //                accepted ? MultiplexingXXXSocketSupport.clone(p, /* arraycopy */ true) : p);
 //            socketReceived.notifyAll();
 //          }
-          accepted = true;
+                  accepted = true;
 
-          // Emil Ivov: Don't break because we want all
-          // filtering sockets to get the received packet.
-        }
+                  // Emil Ivov: Don't break because we want all
+                  // filtering sockets to get the received packet.
+              }
+          }
       }
       if (!accepted)
       {
-        received.offer(p);
+          if (!received.offer(p))
+          {
+              ++numDroppedPackets;
+          }
         /*
         List<DatagramPacket> thisReceived = received;
 
@@ -365,7 +372,10 @@ public class MultiplexingDatagramSocket
         }
         */
       }
-    }
+      if (numDroppedPackets % 100 == 0)
+      {
+          System.out.println("BB: Multiplexing socket " + hashCode() + " has dropped " + numDroppedPackets + " due to full queues");
+      }
   }
 
   @Override
