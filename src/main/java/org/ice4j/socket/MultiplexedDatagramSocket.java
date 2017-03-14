@@ -20,6 +20,7 @@ package org.ice4j.socket;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
 
 /**
  * Represents a <tt>DatagramSocket</tt> which receives <tt>DatagramPacket</tt>s
@@ -55,6 +56,9 @@ public class MultiplexedDatagramSocket
      * The list of <tt>DatagramPacket</tt>s to be received through this
      * <tt>DatagramSocket</tt> i.e. accepted by {@link #filter}.
      */
+    ArrayBlockingQueue<DatagramPacket> received
+            = new ArrayBlockingQueue<>(100);
+    /*
     final List<DatagramPacket> received
         = new SocketReceiveBuffer()
         {
@@ -68,6 +72,7 @@ public class MultiplexedDatagramSocket
                 return MultiplexedDatagramSocket.this.getReceiveBufferSize();
             }
         };
+    */
 
     /**
      * Initializes a new <tt>MultiplexedDatagramSocket</tt> which is unbound and

@@ -336,14 +336,16 @@ public class MultiplexingDatagramSocket
       {
         if (socket.getFilter().accept(p))
         {
-          List<DatagramPacket> socketReceived = socket.received;
+          //List<DatagramPacket> socketReceived = socket.received;
+          ArrayBlockingQueue<DatagramPacket> socketReceived = socket.received;
 
-          synchronized (socketReceived)
-          {
-            socketReceived.add(
-                accepted ? MultiplexingXXXSocketSupport.clone(p, /* arraycopy */ true) : p);
-            socketReceived.notifyAll();
-          }
+          socketReceived.offer(accepted ? MultiplexingXXXSocketSupport.clone(p, /* arraycopy */ true) : p);
+//          synchronized (socketReceived)
+//          {
+//            socketReceived.add(
+//                accepted ? MultiplexingXXXSocketSupport.clone(p, /* arraycopy */ true) : p);
+//            socketReceived.notifyAll();
+//          }
           accepted = true;
 
           // Emil Ivov: Don't break because we want all
@@ -376,7 +378,7 @@ public class MultiplexingDatagramSocket
   void receive(MultiplexedDatagramSocket multiplexed, DatagramPacket p)
       throws IOException
   {
-    receiveHelper(multiplexed.received, p, soTimeout);
+    newReceiveHelper(multiplexed.received, p);
   }
 
   @Override
