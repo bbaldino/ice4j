@@ -223,9 +223,9 @@ public class MultiplexingDatagramSocket
               {
                   System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
                           " doing the actual receive");
-                  super.receive(p);
+                  super.receive(r);
                   System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
-                          " got data from the actual received");
+                          " got data from the actual receive");
                   break;
 
               }
