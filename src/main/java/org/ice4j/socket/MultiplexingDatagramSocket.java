@@ -105,21 +105,39 @@ public class MultiplexingDatagramSocket
       if (socket != null)
       {
         sockets.add(socket);
-        //moveReceivedFromThisToSocket(socket);
+        moveReceivedFromThisToSocket(socket);
       }
       return socket;
     }
   }
 
-  /*
   private void moveReceivedFromThisToSocket(MultiplexedDatagramSocket socket)
   {
     // Pull the packets which have been received already and are accepted by
     // the specified multiplexed socket out of the multiplexing socket.
-    List<DatagramPacket> thisReceived = received;
+    //List<DatagramPacket> thisReceived = received;
     DatagramPacketFilter socketFilter = socket.getFilter();
     List<DatagramPacket> toMove = null;
 
+    for (DatagramPacket p : received)
+    {
+        if (socketFilter.accept(p))
+        {
+            if (toMove == null)
+            {
+                toMove = new LinkedList<>();
+            }
+            toMove.add(p);
+        }
+    }
+
+    for (DatagramPacket p : toMove)
+    {
+        received.remove(p);
+        socket.received.offer(p);
+    }
+
+    /*
     synchronized (thisReceived)
     {
       if (thisReceived.isEmpty())
@@ -164,8 +182,8 @@ public class MultiplexingDatagramSocket
         socketReceived.notifyAll();
       }
     }
+    */
   }
-  */
 
   @Override
   public int getSoTimeout()
