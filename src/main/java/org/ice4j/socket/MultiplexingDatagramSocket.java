@@ -109,6 +109,7 @@ public class MultiplexingDatagramSocket
           MultiplexedDatagramSocket socket = new MultiplexedDatagramSocket(this, filter);
           if (socket != null)
           {
+              System.out.println("BJB: MultiplexingSocket@" + hashCode() + " adding socket with filter " + filter.getClass().getName());
               sockets.add(socket);
               moveReceivedFromThisToSocket(socket);
           }
@@ -224,6 +225,7 @@ public class MultiplexingDatagramSocket
                   System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
                           " doing the actual receive");
                   super.receive(r);
+                  acceptBySocketsOrThis(r);
                   System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
                           " got data from the actual receive");
                   break;
