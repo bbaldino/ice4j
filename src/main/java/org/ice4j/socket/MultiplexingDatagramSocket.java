@@ -109,7 +109,7 @@ public class MultiplexingDatagramSocket
           MultiplexedDatagramSocket socket = new MultiplexedDatagramSocket(this, filter);
           if (socket != null)
           {
-              System.out.println("BJB: MultiplexingSocket@" + hashCode() + " adding socket with filter " + filter.getClass().getName());
+              //System.out.println("BJB: MultiplexingSocket@" + hashCode() + " adding socket with filter " + filter.getClass().getName());
               sockets.add(socket);
               moveReceivedFromThisToSocket(socket);
           }
@@ -148,7 +148,7 @@ public class MultiplexingDatagramSocket
             received.remove(p);
             if (!socket.received.offer(p))
             {
-                System.out.println("BJB: No room to move packet to new multiplexed socket");
+                //System.out.println("BJB: No room to move packet to new multiplexed socket");
             }
         }
     }
@@ -202,13 +202,13 @@ public class MultiplexingDatagramSocket
           if (wait) {
               try
               {
-                  System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
-                          " waiting for someone to do the receive");
+                  //System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
+                  //      " waiting for someone to do the receive");
                   r = received.poll(remainingTimeout, TimeUnit.MILLISECONDS);
                   if (r != null)
                   {
-                      System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
-                              " got data after waiting for someone to do the receive");
+                      //System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
+                      //      " got data after waiting for someone to do the receive");
                       break;
                   }
               }
@@ -222,14 +222,12 @@ public class MultiplexingDatagramSocket
               r = MultiplexingXXXSocketSupport.clone(p, false);
               try
               {
-                  System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
-                          " doing the actual receive");
+                  //System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
+                  //      " doing the actual receive");
                   super.receive(r);
                   acceptBySocketsOrThis(r);
-                  System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
-                          " got data from the actual receive");
-                  break;
-
+                  //System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
+                  //      " got data from the actual receive");
               }
               finally
               {
@@ -354,21 +352,21 @@ public class MultiplexingDatagramSocket
   private void acceptBySocketsOrThis(DatagramPacket p)
   {
       boolean accepted = false;
-      System.out.println("BJB: Checking if any multiplexed sockets will take packet");
+      //System.out.println("BJB: Checking if any multiplexed sockets will take packet");
       synchronized (sockets)
       {
           for (MultiplexedDatagramSocket socket : sockets)
           {
-              System.out.println("BJB: Checking if socket with filter " + socket.getFilter().getClass().getName() + " will take packet");
+              //System.out.println("BJB: Checking if socket with filter " + socket.getFilter().getClass().getName() + " will take packet");
               if (socket.getFilter().accept(p))
               {
-                  System.out.println("BJB: socket with filter " + socket.getFilter().getClass().getName() + " will take packet!");
+                  //System.out.println("BJB: socket with filter " + socket.getFilter().getClass().getName() + " will take packet!");
                   ArrayBlockingQueue<DatagramPacket> socketReceived = socket.received;
 
                   if (!socketReceived.offer(accepted ? MultiplexingXXXSocketSupport.clone(p, /* arraycopy */ true) : p))
                   {
                       ++numDroppedPackets;
-                      System.out.println("BJB: No room to accept packet in multiplexed socket");
+                      //System.out.println("BJB: No room to accept packet in multiplexed socket");
                   }
                   accepted = true;
 
@@ -382,12 +380,12 @@ public class MultiplexingDatagramSocket
           if (!received.offer(p))
           {
               ++numDroppedPackets;
-              System.out.println("BJB: No room to accept packet in multiplexed socket");
+              //System.out.println("BJB: No room to accept packet in multiplexed socket");
           }
       }
       if (numDroppedPackets % 100 == 0)
       {
-          System.out.println("BB: Multiplexing socket " + hashCode() + " has dropped " + numDroppedPackets + " due to full queues");
+          //System.out.println("BB: Multiplexing socket " + hashCode() + " has dropped " + numDroppedPackets + " due to full queues");
       }
   }
 
