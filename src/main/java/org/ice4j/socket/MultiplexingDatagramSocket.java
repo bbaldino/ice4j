@@ -88,28 +88,32 @@ public class MultiplexingDatagramSocket
       boolean create)
       throws SocketException
   {
-    // find or create a socket with the given filter
-    synchronized(sockets)
-    {
-      for (MultiplexedDatagramSocket socket : sockets)
+      if (filter == null)
       {
-        if (filter.equals(socket.getFilter()))
-        {
+          throw new NullPointerException("filter");
+      }
+      // find or create a socket with the given filter
+      synchronized(sockets)
+      {
+          for (MultiplexedDatagramSocket socket : sockets)
+          {
+              if (filter.equals(socket.getFilter()))
+              {
+                  return socket;
+              }
+          }
+          if (!create)
+          {
+              return null;
+          }
+          MultiplexedDatagramSocket socket = new MultiplexedDatagramSocket(this, filter);
+          if (socket != null)
+          {
+              sockets.add(socket);
+              moveReceivedFromThisToSocket(socket);
+          }
           return socket;
-        }
       }
-      if (!create)
-      {
-        return null;
-      }
-      MultiplexedDatagramSocket socket = new MultiplexedDatagramSocket(this, filter);
-      if (socket != null)
-      {
-        sockets.add(socket);
-        moveReceivedFromThisToSocket(socket);
-      }
-      return socket;
-    }
   }
 
   private void moveReceivedFromThisToSocket(MultiplexedDatagramSocket socket)
@@ -120,6 +124,10 @@ public class MultiplexingDatagramSocket
     DatagramPacketFilter socketFilter = socket.getFilter();
     List<DatagramPacket> toMove = null;
 
+    if (received.isEmpty())
+    {
+        return;
+    }
     for (DatagramPacket p : received)
     {
         if (socketFilter.accept(p))
@@ -143,54 +151,6 @@ public class MultiplexingDatagramSocket
             }
         }
     }
-
-
-    /*
-    synchronized (thisReceived)
-    {
-      if (thisReceived.isEmpty())
-      {
-        return;
-      }
-      else
-      {
-        for (Iterator<DatagramPacket> i = thisReceived.iterator();
-             i.hasNext();)
-        {
-          DatagramPacket p = i.next();
-
-          if (socketFilter.accept(p))
-          {
-            if (toMove == null)
-              toMove = new LinkedList<>();
-            toMove.add(p);
-
-            // XXX In the method receive, we allow multiple filters
-            // to accept one and the same packet.
-            i.remove();
-          }
-        }
-      }
-    }
-
-    // Push the packets which have been accepted already and are accepted by
-    // the specified multiplexed socket into the multiplexed socket in
-    // question.
-    if (toMove != null)
-    {
-      List<DatagramPacket> socketReceived = socket.received;
-
-      synchronized (socketReceived)
-      {
-        socketReceived.addAll(toMove);
-        // The notifyAll will practically likely be unnecessary because
-        // the specified socket will likely be a newly-created one to
-        // which noone else has a reference. Anyway, dp the invocation
-        // for the purposes of consistency, clarity, and such.
-        socketReceived.notifyAll();
-      }
-    }
-    */
   }
 
   @Override
@@ -202,84 +162,83 @@ public class MultiplexingDatagramSocket
   private void newReceiveHelper(ArrayBlockingQueue<DatagramPacket> received, DatagramPacket p)
           throws IOException
   {
-    long startTime = System.currentTimeMillis();
-    DatagramPacket r = null;
+      long startTime = System.currentTimeMillis();
+      DatagramPacket r = null;
 
-    while (true) {
-        long now = System.currentTimeMillis();
+      while (true) {
+          long now = System.currentTimeMillis();
 
-        // Check if there's already a packet waiting
-      r = received.poll();
-      if (r != null) {
-        break;
-      }
-        long remainingTimeout;
-        if (soTimeout > 0)
-        {
-            remainingTimeout = soTimeout - (now - startTime);
-            if (remainingTimeout <= 0L)
-            {
-                throw new SocketTimeoutException(Long.toString(remainingTimeout));
-            }
-        }
-        else
-        {
-            remainingTimeout = 1000L;
-        }
-
-      // If there isn't a packet waiting yet, check if the receive is already being done
-      boolean wait;
-      synchronized (receiveLock) {
-        if (!doingReceive) {
-          doingReceive = true;
-        }
-      }
-      if (!doingReceive) {
-        try
-        {
-            System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
-                    " waiting for someone to do the receive");
-            r = received.poll(remainingTimeout, TimeUnit.MILLISECONDS);
-            if (r != null)
-            {
-                System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
-                        " got data after waiting for someone to do the receive");
-                break;
-            }
-            else
-            {
-                continue;
-            }
-        } catch (InterruptedException e)
-        {
-          continue;
-        }
-      }
-      else
-      {
-          DatagramPacket c = MultiplexingXXXSocketSupport.clone(p, false);
-          try
-          {
-              System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
-                    " doing the actual receive");
-              super.receive(c);
-              System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
-                      " got data from the actual received");
-
-          } catch (IOException e)
-          {
-            continue;
+          // Check if there's already a packet waiting
+          r = received.poll();
+          if (r != null) {
+              break;
           }
-          finally
+          long remainingTimeout;
+          if (soTimeout > 0)
           {
-              synchronized (receiveLock)
+              remainingTimeout = soTimeout - (now - startTime);
+              if (remainingTimeout <= 0L)
               {
-                  doingReceive = false;
+                  throw new SocketTimeoutException(Long.toString(remainingTimeout));
+              }
+          }
+          else
+          {
+              remainingTimeout = 1000L;
+          }
+
+          // If there isn't a packet waiting yet, check if the receive is already being done
+          boolean wait = false;
+          synchronized (receiveLock) {
+              if (!doingReceive) {
+                  doingReceive = true;
+              }
+              else
+              {
+                  wait = true;
+              }
+          }
+          if (wait) {
+              try
+              {
+                  System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
+                          " waiting for someone to do the receive");
+                  r = received.poll(remainingTimeout, TimeUnit.MILLISECONDS);
+                  if (r != null)
+                  {
+                      System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
+                              " got data after waiting for someone to do the receive");
+                      break;
+                  }
+              }
+              catch (InterruptedException e)
+              {
+              }
+              continue;
+          }
+          else
+          {
+              DatagramPacket c = MultiplexingXXXSocketSupport.clone(p, false);
+              try
+              {
+                  System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
+                          " doing the actual receive");
+                  super.receive(c);
+                  System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
+                          " got data from the actual received");
+                  break;
+
+              }
+              finally
+              {
+                  synchronized (receiveLock)
+                  {
+                      doingReceive = false;
+                  }
               }
           }
       }
-    }
-    MultiplexingXXXSocketSupport.copy(r, p);
+      MultiplexingXXXSocketSupport.copy(r, p);
   }
 
   private void receiveHelper(List<DatagramPacket> received, DatagramPacket p, int timeout)
@@ -399,7 +358,6 @@ public class MultiplexingDatagramSocket
           {
               if (socket.getFilter().accept(p))
               {
-                  //List<DatagramPacket> socketReceived = socket.received;
                   ArrayBlockingQueue<DatagramPacket> socketReceived = socket.received;
 
                   if (!socketReceived.offer(accepted ? MultiplexingXXXSocketSupport.clone(p, /* arraycopy */ true) : p))
@@ -407,12 +365,6 @@ public class MultiplexingDatagramSocket
                       ++numDroppedPackets;
                       System.out.println("BJB: No room to accept packet in multiplexed socket");
                   }
-//          synchronized (socketReceived)
-//          {
-//            socketReceived.add(
-//                accepted ? MultiplexingXXXSocketSupport.clone(p, /* arraycopy */ true) : p);
-//            socketReceived.notifyAll();
-//          }
                   accepted = true;
 
                   // Emil Ivov: Don't break because we want all
@@ -427,15 +379,6 @@ public class MultiplexingDatagramSocket
               ++numDroppedPackets;
               System.out.println("BJB: No room to accept packet in multiplexed socket");
           }
-        /*
-        List<DatagramPacket> thisReceived = received;
-
-        synchronized (thisReceived)
-        {
-          thisReceived.add(p);
-          thisReceived.notifyAll();
-        }
-        */
       }
       if (numDroppedPackets % 100 == 0)
       {
