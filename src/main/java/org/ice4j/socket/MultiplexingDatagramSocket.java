@@ -230,16 +230,18 @@ public class MultiplexingDatagramSocket
       // If there isn't a packet waiting yet, check if the receive is already being done
       boolean wait;
       synchronized (receiveLock) {
-        if (doingReceive) {
-          wait = true;
-        } else {
-          wait = false;
+        if (!doingReceive) {
+          doingReceive = true;
         }
       }
       if (doingReceive) {
         try
         {
           r = received.poll(remainingTimeout, TimeUnit.MILLISECONDS);
+          synchronized (receiveLock)
+          {
+              doingReceive = false;
+          }
           break;
         } catch (InterruptedException e)
         {
@@ -426,13 +428,17 @@ public class MultiplexingDatagramSocket
   public void receive(DatagramPacket p)
       throws IOException
   {
-    newReceiveHelper(received, p);
+      //System.out.println("BJB: " + Thread.currentThread().getName() + " reading from multiplexing socket " + hashCode());
+      newReceiveHelper(received, p);
+      //System.out.println("BJB: " + Thread.currentThread().getName() + " read from multiplexing socket " + hashCode());
   }
 
   void receive(MultiplexedDatagramSocket multiplexed, DatagramPacket p)
       throws IOException
   {
-    newReceiveHelper(multiplexed.received, p);
+      //System.out.println("BJB: " + Thread.currentThread().getName() + " reading from multiplexed socket " + multiplexed.hashCode());
+      newReceiveHelper(multiplexed.received, p);
+      //System.out.println("BJB: " + Thread.currentThread().getName() + " read from multiplexed socket " + multiplexed.hashCode());
   }
 
   @Override
