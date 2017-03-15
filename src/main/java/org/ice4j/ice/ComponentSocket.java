@@ -30,7 +30,7 @@ import org.ice4j.util.*; //Disambiguation
  * an ICE {@link Component}.
  */
 public class ComponentSocket
-    extends MergingDatagramSocket2
+    extends MergingDatagramSocket
     implements PropertyChangeListener
 {
     /**

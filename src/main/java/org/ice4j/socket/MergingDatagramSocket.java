@@ -42,15 +42,15 @@ import org.ice4j.util.Logger; //Disambiguation
  * @author Boris Grozev
  */
 public class MergingDatagramSocket
-    extends DatagramSocket
+        extends DatagramSocket
 {
     /**
      * The {@link Logger} used by the {@link MergingDatagramSocket} class and
      * its instances for logging output.
      */
     private static final java.util.logging.Logger classLogger
-        = java.util.logging.Logger.getLogger(
-                MergingDatagramSocket.class.getName());
+            = java.util.logging.Logger.getLogger(
+            MergingDatagramSocket.class.getName());
 
     /**
      * Used to control access to {@link #socketContainers}.
@@ -66,7 +66,7 @@ public class MergingDatagramSocket
      * Calls to {@link #receive(java.net.DatagramPacket)} will wait on this
      * object in case no packet is available for reading.
      */
-    private final Object receiveLock = new Object();
+    //private final Object receiveLock = new Object();
 
     /**
      * If non-zero, {@link #receive(java.net.DatagramPacket)} will attempt to
@@ -92,12 +92,56 @@ public class MergingDatagramSocket
      * {@link #accept(DatagramPacket)}.
      * Access to this field should be protected by {@link #receiveLock}.
      */
-    private int numDiscardedPackets = 0;
+    //private int numDiscardedPackets = 0;
 
     /**
      * The {@link Logger} used by {@link MergingDatagramSocket} instances.
      */
     private final Logger logger;
+    /**
+     * Represents a {@link DatagramPacket} for the purposes of {@link
+     * SocketContainer}.
+     */
+    private class Buffer
+    {
+        /**
+         * The size of the buffer to allocate.
+         */
+        private static final int MAX_PACKET_SIZE = 1500;
+
+        /**
+         * The time at which this buffer was filled.
+         */
+        long receivedTime = -1;
+
+        /**
+         * The {@link DatagramPacket} wrapped by this {@link Buffer}.
+         */
+        DatagramPacket pkt
+                = new DatagramPacket(
+                new byte[MAX_PACKET_SIZE],
+                0,
+                MAX_PACKET_SIZE);
+
+        /**
+         * Prepares this {@link Buffer} for reuse.
+         */
+        private void reset()
+        {
+            receivedTime = -1;
+
+            // We are going to receive from a socket into this packet. If
+            // the length is insufficient it is going to truncate the data.
+            // So reset it to what we know is the underlying byte[]'s
+            // length.
+            pkt.setLength(MAX_PACKET_SIZE);
+        }
+    }
+
+    private final ArrayBlockingQueue<Buffer> queue
+            = new ArrayBlockingQueue<>(1000);
+    private final ArrayBlockingQueue<Buffer> pool
+            = new ArrayBlockingQueue<>(1000);
 
     /**
      * Initializes a new {@link MergingDatagramSocket} instance.
@@ -107,6 +151,9 @@ public class MergingDatagramSocket
             throws SocketException
     {
         this(null);
+        for (int i = 0; i < 1000; ++i) {
+            pool.offer(new Buffer());
+        }
     }
 
     /**
@@ -153,10 +200,12 @@ public class MergingDatagramSocket
             // XXX do we want to risk obtaining the lock here, or should we just
             // let any thread in receive() find out about the close after it's
             // next timeout?
-            synchronized (receiveLock)
-            {
-                receiveLock.notifyAll();
-            }
+            //TODO(brian): maybe here we need to add a sentinel value to the queue
+            // to wake up any blocked threads?
+            //synchronized (receiveLock)
+            //{
+            //  receiveLock.notifyAll();
+            //}
 
             synchronized (socketContainersSyncRoot)
             {
@@ -199,7 +248,7 @@ public class MergingDatagramSocket
      */
     @Override
     public void send(DatagramPacket pkt)
-        throws IOException
+            throws IOException
     {
         SocketContainer active = getActiveSocket();
         if (active != null)
@@ -223,7 +272,7 @@ public class MergingDatagramSocket
         if (logger.isLoggable(Level.FINE))
         {
             logger.fine("Adding a DelegatingSocket instance: "
-                            + socket.getLocalAddress());
+                    + socket.getLocalAddress());
         }
         doAdd(socket);
     }
@@ -254,7 +303,7 @@ public class MergingDatagramSocket
         if (logger.isLoggable(Level.FINE))
         {
             logger.fine("Adding a DatagramSocket instance: "
-                            + socket.getLocalAddress());
+                    + socket.getLocalAddress());
         }
         doAdd(socket);
     }
@@ -270,7 +319,7 @@ public class MergingDatagramSocket
         Objects.requireNonNull(socket, "socket");
 
         if (!(socket instanceof DelegatingSocket) &&
-            !(socket instanceof DatagramSocket))
+                !(socket instanceof DatagramSocket))
         {
             throw new IllegalStateException("Socket type not supported: "
                     + socket.getClass().getName());
@@ -295,10 +344,10 @@ public class MergingDatagramSocket
             }
 
             SocketContainer[] newSocketContainers
-                = new SocketContainer[socketContainers.length + 1];
+                    = new SocketContainer[socketContainers.length + 1];
             System.arraycopy(socketContainers, 0,
-                             newSocketContainers, 0,
-                             socketContainers.length);
+                    newSocketContainers, 0,
+                    socketContainers.length);
             newSocketContainers[socketContainers.length] = socketContainer;
 
             socketContainers = newSocketContainers;
@@ -342,18 +391,18 @@ public class MergingDatagramSocket
                 socketContainer = socketContainers[i];
 
                 SocketContainer[] newSockets
-                    = new SocketContainer[socketContainers.length - 1];
+                        = new SocketContainer[socketContainers.length - 1];
                 if (i > 0)
                 {
                     System.arraycopy(socketContainers, 0,
-                                     newSockets, 0,
-                                     i);
+                            newSockets, 0,
+                            i);
                 }
                 if (i < socketContainers.length - 1)
                 {
                     System.arraycopy(socketContainers, i + 1,
-                                     newSockets, i,
-                                     socketContainers.length - i - 1);
+                            newSockets, i,
+                            socketContainers.length - i - 1);
                 }
 
                 socketContainers = newSockets;
@@ -362,8 +411,8 @@ public class MergingDatagramSocket
                 {
                     // TODO: proper selection of a new active socket
                     logger.warning(
-                        "Removing the active socket. Won't be able to send "
-                        + "until a new one is elected.");
+                            "Removing the active socket. Won't be able to send "
+                                    + "until a new one is elected.");
                     active = null;
                 }
             }
@@ -399,7 +448,7 @@ public class MergingDatagramSocket
         for (int i = 0; i < socketContainers.length; i++)
         {
             if (socketContainers[i].datagramSocket == socket ||
-                socketContainers[i].delegatingSocket == socket)
+                    socketContainers[i].delegatingSocket == socket)
             {
                 return i;
             }
@@ -454,7 +503,7 @@ public class MergingDatagramSocket
     {
         SocketContainer activeSocket = getActiveSocket();
         return
-            activeSocket == null ? null : activeSocket.getLocalSocketAddress();
+                activeSocket == null ? null : activeSocket.getLocalSocketAddress();
     }
 
     /**
@@ -485,97 +534,28 @@ public class MergingDatagramSocket
     @Override
     public void receive(DatagramPacket p)
             throws SocketTimeoutException,
-                   SocketClosedException
+            SocketClosedException
     {
+        if (isClosed())
+        {
+            throw new SocketClosedException();
+        }
         long start = System.currentTimeMillis();
         int soTimeout = this.soTimeout;
 
-        // We need to hold the lock while checking for an available packet,
-        // otherwise we might end up wait()-ing if a packet becomes available
-        // after our check.
-        // We keep the loop inside the lock, because this prevents us from
-        // having to re-obtain the lock after wait() returns. All operations
-        // inside the block are non-blocking, except for wait(), so we run no
-        // risk of causing a deadlock by doing so.
-        synchronized (receiveLock)
-        {
-            do
-            {
-                if (isClosed())
-                {
-                    throw new SocketClosedException();
-                }
-
-                // Find the input socket with the oldest packet
-                SocketContainer[] socketContainers = this.socketContainers;
-                SocketContainer socketToReceiveFrom = null;
-                long firstTime = -1;
-                for (SocketContainer socketContainer : socketContainers)
-                {
-                    long f = socketContainer.getFirstReceivedTime();
-                    if (f > 0)
-                    {
-                        if (firstTime == -1 || firstTime > f)
-                        {
-                            firstTime = f;
-                            socketToReceiveFrom = socketContainer;
-                        }
-                    }
-                }
-
-                // If a packet is available, receive it
-                if (socketToReceiveFrom != null)
-                {
-                    socketToReceiveFrom.receive(p);
-
-                    if (accept(p))
-                    {
-                        socketToReceiveFrom.accepted(p);
-                        return;
-                    }
-                    else
-                    {
-                        numDiscardedPackets++;
-                        if (numDiscardedPackets % 100 == 1)
-                        {
-                            logger.info("Discarded " + numDiscardedPackets
-                                    + " packets. Last remote address:"
-                                    + p.getSocketAddress());
-                        }
-
-                        // Go on and receive the next packet in p.
-                        continue;
-                    }
-                }
-                // Otherwise wait on receiveLock.
-                else
-                {
-                    long waitTimeout = 500;
-                    if (soTimeout > 0)
-                    {
-                        long remaining
-                            = start + soTimeout
-                                    - System.currentTimeMillis();
-                        if (remaining <= 0)
-                            throw new SocketTimeoutException();
-
-                        waitTimeout = Math.min(waitTimeout, remaining);
-                    }
-                    try
-                    {
-                        receiveLock.wait(waitTimeout);
-                    }
-                    catch (InterruptedException ie)
-                    {
-                        Thread.currentThread().interrupt();
-                        // We haven't received a packet, but what else can we
-                        // do?
-                        return;
-                    }
-                }
-            }
-            while (true);
+        Buffer buf = null;
+        try {
+            buf = queue.take();
+        } catch (InterruptedException e) {
+            return;
         }
+        byte[] dest = p.getData();
+        int destOffset = p.getOffset();
+        int len = Math.min(dest.length - destOffset, buf.pkt.getLength());
+        System.arraycopy(buf.pkt.getData(), buf.pkt.getOffset(), dest, destOffset, len);
+        p.setLength(len);
+        p.setSocketAddress(buf.pkt.getSocketAddress());
+        pool.offer(buf);
     }
 
     /**
@@ -598,7 +578,7 @@ public class MergingDatagramSocket
         if (logger.isLoggable(Level.FINE))
         {
             logger.fine("Initializing the active container, socket=" + socket
-                        + "; remote address=" + remoteAddress);
+                    + "; remote address=" + remoteAddress);
         }
 
         synchronized (socketContainersSyncRoot)
@@ -618,7 +598,7 @@ public class MergingDatagramSocket
             for (SocketContainer container : socketContainers)
             {
                 if (socket == container.datagramSocket
-                    || socket == container.delegatingSocket)
+                        || socket == container.delegatingSocket)
                 {
                     newActive = container;
                     break;
@@ -665,14 +645,13 @@ public class MergingDatagramSocket
          * The queue to which packets received from this instance's socket are
          * added.
          */
-        private final ArrayBlockingQueue<Buffer> queue
-            = new ArrayBlockingQueue<>(100);
+        //private final ArrayBlockingQueue<Buffer> queue
+        //    = new ArrayBlockingQueue<>(100);
 
         /**
          * A pool of unused {@link Buffer} instances.
          */
-        private final ArrayBlockingQueue<Buffer> pool
-            = new ArrayBlockingQueue<>(10);
+
 
         /**
          * A flag used to signal to {@link #thread} to finish.
@@ -739,14 +718,14 @@ public class MergingDatagramSocket
             };
             thread.setDaemon(true);
             thread.setName("MergingDatagramSocket reader thread for: "
-                               + getLocalSocketAddress() + " -> "
-                               + getRemoteSocketAddress());
+                    + getLocalSocketAddress() + " -> "
+                    + getRemoteSocketAddress());
 
             if (logger.isLoggable(Level.FINE))
             {
                 logger.fine("Starting the thread for socket "
-                                + getLocalSocketAddress() + " -> "
-                                + getRemoteSocketAddress());
+                        + getLocalSocketAddress() + " -> "
+                        + getRemoteSocketAddress());
             }
             thread.start();
         }
@@ -757,8 +736,8 @@ public class MergingDatagramSocket
         private Buffer getFreeBuffer()
         {
             Buffer buffer = pool.poll();
-            if (buffer == null)
-                buffer = new Buffer();
+            //if (buffer == null)
+            //  buffer = new Buffer();
             buffer.reset();
             return buffer;
         }
@@ -795,10 +774,10 @@ public class MergingDatagramSocket
                 try
                 {
                     queue.put(buffer);
-                    synchronized (receiveLock)
-                    {
-                        receiveLock.notifyAll();
-                    }
+                    //synchronized (receiveLock)
+                    //{
+                    //  receiveLock.notifyAll();
+                    //}
                 }
                 catch (InterruptedException ie)
                 {
@@ -827,21 +806,22 @@ public class MergingDatagramSocket
          * underlying socket.
          */
         private boolean doReceive(Buffer buffer)
-            throws IOException
+                throws IOException
         {
             while (true)
             {
                 if (closed || Thread.currentThread().isInterrupted())
                     break;
+                DatagramPacket bufferPkt = buffer.pkt;
                 try
                 {
                     if (datagramSocket != null)
                     {
-                        datagramSocket.receive(buffer.pkt);
+                        datagramSocket.receive(bufferPkt);
                     }
                     else
                     {
-                        delegatingSocket.receive(buffer.pkt);
+                        delegatingSocket.receive(bufferPkt);
                     }
 
                     buffer.receivedTime = System.currentTimeMillis();
@@ -863,14 +843,18 @@ public class MergingDatagramSocket
          * this {@link MergingDatagramSocket}, if it isn't already the active
          * socket.
          */
+        //NOTE(brian): from what i've found, reference assignment is atomic, so we don't
+        // need to lock here, we can just set the active one to ourself
         private void maybeUpdateActive()
         {
+            MergingDatagramSocket.this.active = this;
+            /*
             SocketContainer active = MergingDatagramSocket.this.active;
             // Avoid obtaining the lock on every packet from the active socket.
             // There is no harm if the value is overwritten before we obtain
             // the lock.
             if (active != this)
-            {
+            {socketContainersSyncRoot
                 synchronized (socketContainersSyncRoot)
                 {
                     MergingDatagramSocket.this.active = this;
@@ -881,6 +865,7 @@ public class MergingDatagramSocket
                     }
                 }
             }
+            */
         }
 
         /**
@@ -900,13 +885,13 @@ public class MergingDatagramSocket
             byte[] dest = p.getData();
             int destOffset = p.getOffset();
             int len
-                = Math.min(
-                        dest.length - destOffset,
-                        buffer.pkt.getLength());
+                    = Math.min(
+                    dest.length - destOffset,
+                    buffer.pkt.getLength());
 
             System.arraycopy(buffer.pkt.getData(), buffer.pkt.getOffset(),
-                             dest, destOffset,
-                             len);
+                    dest, destOffset,
+                    len);
             p.setLength(len);
             p.setSocketAddress(buffer.pkt.getSocketAddress());
 
@@ -936,8 +921,8 @@ public class MergingDatagramSocket
         private InetAddress getLocalAddress()
         {
             return datagramSocket != null
-                ? datagramSocket.getLocalAddress()
-                : delegatingSocket.getLocalAddress();
+                    ? datagramSocket.getLocalAddress()
+                    : delegatingSocket.getLocalAddress();
         }
 
         /**
@@ -949,8 +934,8 @@ public class MergingDatagramSocket
         private int getLocalPort()
         {
             return datagramSocket != null
-                ? datagramSocket.getLocalPort()
-                : delegatingSocket.getLocalPort();
+                    ? datagramSocket.getLocalPort()
+                    : delegatingSocket.getLocalPort();
         }
 
         /**
@@ -962,8 +947,8 @@ public class MergingDatagramSocket
         public SocketAddress getLocalSocketAddress()
         {
             return datagramSocket != null
-                ? datagramSocket.getLocalSocketAddress()
-                : delegatingSocket.getLocalSocketAddress();
+                    ? datagramSocket.getLocalSocketAddress()
+                    : delegatingSocket.getLocalSocketAddress();
         }
 
         /**
@@ -975,12 +960,12 @@ public class MergingDatagramSocket
             if (datagramSocket != null)
             {
                 return datagramSocket.getLocalSocketAddress()
-                    + " -> " + remoteAddress;
+                        + " -> " + remoteAddress;
             }
             else
             {
                 return delegatingSocket.getLocalSocketAddress()
-                    + " -> " + remoteAddress;
+                        + " -> " + remoteAddress;
             }
         }
 
@@ -991,7 +976,7 @@ public class MergingDatagramSocket
          * @param pkt the packet to send.
          */
         private void send(DatagramPacket pkt)
-            throws IOException
+                throws IOException
         {
             // The application writing data doesn't necessarily know what
             // remote address to use. Since this SocketContainer was selected
@@ -1083,44 +1068,6 @@ public class MergingDatagramSocket
             }
         }
 
-        /**
-         * Represents a {@link DatagramPacket} for the purposes of {@link
-         * SocketContainer}.
-         */
-        private class Buffer
-        {
-            /**
-             * The size of the buffer to allocate.
-             */
-            private static final int MAX_PACKET_SIZE = 1500;
 
-            /**
-             * The time at which this buffer was filled.
-             */
-            long receivedTime = -1;
-
-            /**
-             * The {@link DatagramPacket} wrapped by this {@link Buffer}.
-             */
-            DatagramPacket pkt
-                = new DatagramPacket(
-                new byte[MAX_PACKET_SIZE],
-                0,
-                MAX_PACKET_SIZE);
-
-            /**
-             * Prepares this {@link Buffer} for reuse.
-             */
-            private void reset()
-            {
-                receivedTime = -1;
-
-                // We are going to receive from a socket into this packet. If
-                // the length is insufficient it is going to truncate the data.
-                // So reset it to what we know is the underlying byte[]'s
-                // length.
-                pkt.setLength(MAX_PACKET_SIZE);
-            }
-        }
     }
 }

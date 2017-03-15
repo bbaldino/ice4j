@@ -41,16 +41,16 @@ import org.ice4j.util.Logger; //Disambiguation
  *
  * @author Boris Grozev
  */
-public class MergingDatagramSocket2
+public class MergingDatagramSocket3
     extends DatagramSocket
 {
   /**
-   * The {@link Logger} used by the {@link MergingDatagramSocket2} class and
+   * The {@link Logger} used by the {@link MergingDatagramSocket3} class and
    * its instances for logging output.
    */
   private static final java.util.logging.Logger classLogger
       = java.util.logging.Logger.getLogger(
-      MergingDatagramSocket2.class.getName());
+      MergingDatagramSocket3.class.getName());
 
   /**
    * Used to control access to {@link #socketContainers}.
@@ -95,7 +95,7 @@ public class MergingDatagramSocket2
   //private int numDiscardedPackets = 0;
 
   /**
-   * The {@link Logger} used by {@link MergingDatagramSocket2} instances.
+   * The {@link Logger} used by {@link MergingDatagramSocket3} instances.
    */
   private final Logger logger;
   /**
@@ -144,10 +144,10 @@ public class MergingDatagramSocket2
       = new ArrayBlockingQueue<>(100000);
 
   /**
-   * Initializes a new {@link MergingDatagramSocket2} instance.
+   * Initializes a new {@link MergingDatagramSocket3} instance.
    * @throws SocketException
    */
-  public MergingDatagramSocket2()
+  public MergingDatagramSocket3()
       throws SocketException
   {
     this(null);
@@ -157,12 +157,12 @@ public class MergingDatagramSocket2
   }
 
   /**
-   * Initializes a new {@link MergingDatagramSocket2} instance.
+   * Initializes a new {@link MergingDatagramSocket3} instance.
    * @param levelDelegate the {@link Logger} instance which dictates the
-   * logging level for the new {@link MergingDatagramSocket2} instance.
+   * logging level for the new {@link MergingDatagramSocket3} instance.
    * @throws SocketException
    */
-  public MergingDatagramSocket2(Logger levelDelegate)
+  public MergingDatagramSocket3(Logger levelDelegate)
       throws SocketException
   {
     logger = new Logger(classLogger, levelDelegate);
@@ -311,7 +311,7 @@ public class MergingDatagramSocket2
   /**
    * Adds a socket (either a {@link DatagramSocket} or a
    * {@link DelegatingSocket}) to the list of underlying sockets merged by
-   * this {@link MergingDatagramSocket2}.
+   * this {@link MergingDatagramSocket3}.
    * @param socket the socket to add.
    */
   private void doAdd(Object socket)
@@ -356,7 +356,7 @@ public class MergingDatagramSocket2
 
   /**
    * Removes a specific {@link DatagramSocket} from the list of sockets
-   * merged by this {@link MergingDatagramSocket2}.
+   * merged by this {@link MergingDatagramSocket3}.
    * @param socket the {@link DatagramSocket} to remove.
    */
   public void remove(DatagramSocket socket)
@@ -366,7 +366,7 @@ public class MergingDatagramSocket2
 
   /**
    * Removes a specific {@link DelegatingSocket} from the list of sockets
-   * merged by this {@link MergingDatagramSocket2}.
+   * merged by this {@link MergingDatagramSocket3}.
    * @param socket the {@link DelegatingSocket} to remove.
    */
   public void remove(DelegatingSocket socket)
@@ -376,7 +376,7 @@ public class MergingDatagramSocket2
 
   /**
    * Removes a socket from the list of sockets merged by this
-   * {@link MergingDatagramSocket2}.
+   * {@link MergingDatagramSocket3}.
    * @param socket the socket to remove.
    */
   private void doRemove(Object socket)
@@ -509,7 +509,7 @@ public class MergingDatagramSocket2
   /**
    * Checks whether a particular {@link DatagramPacket}, received from one of
    * the underlying sockets of thins merging socket, should be accepted and
-   * provided for reception from this {@link MergingDatagramSocket2}.
+   * provided for reception from this {@link MergingDatagramSocket3}.
    * @param p the packet for which to decide whether to accept it or not.
    * @return {@code true} iff {@code p} should be accepted.
    */
@@ -559,7 +559,7 @@ public class MergingDatagramSocket2
   }
 
   /**
-   * Initializes the active socket of this {@link MergingDatagramSocket2}.
+   * Initializes the active socket of this {@link MergingDatagramSocket3}.
    * @param socketWrapper the {@link IceSocketWrapper} instance wrapping the
    * actual socket that should be used. Used to find the correct
    * {@link SocketContainer}
@@ -618,7 +618,7 @@ public class MergingDatagramSocket2
   }
 
   /**
-   * Contains one of the sockets which this {@link MergingDatagramSocket2}
+   * Contains one of the sockets which this {@link MergingDatagramSocket3}
    * merges, and objects associated with the socket, including a thread
    * which loops reading from it.
    *
@@ -665,7 +665,7 @@ public class MergingDatagramSocket2
      * not when a packet is received from the underlying socket by its
      * read thread. This is in order to prevent poisoning of the remote
      * address, since the verification of the address is performed by
-     * the {@link MergingDatagramSocket2} after it invokes
+     * the {@link MergingDatagramSocket3} after it invokes
      * {@link #receive(DatagramPacket)}.
      */
     private SocketAddress remoteAddress = null;
@@ -717,7 +717,7 @@ public class MergingDatagramSocket2
         }
       };
       thread.setDaemon(true);
-      thread.setName("MergingDatagramSocket2 reader thread for: "
+      thread.setName("MergingDatagramSocket3 reader thread for: "
           + getLocalSocketAddress() + " -> "
           + getRemoteSocketAddress());
 
@@ -840,16 +840,16 @@ public class MergingDatagramSocket2
 
     /**
      * Makes this {@link SocketContainer} the active socket container for
-     * this {@link MergingDatagramSocket2}, if it isn't already the active
+     * this {@link MergingDatagramSocket3}, if it isn't already the active
      * socket.
      */
     //NOTE(brian): from what i've found, reference assignment is atomic, so we don't
     // need to lock here, we can just set the active one to ourself
     private void maybeUpdateActive()
     {
-      MergingDatagramSocket2.this.active = this;
+      MergingDatagramSocket3.this.active = this;
             /*
-            SocketContainer active = MergingDatagramSocket2.this.active;
+            SocketContainer active = MergingDatagramSocket3.this.active;
             // Avoid obtaining the lock on every packet from the active socket.
             // There is no harm if the value is overwritten before we obtain
             // the lock.
@@ -857,7 +857,7 @@ public class MergingDatagramSocket2
             {socketContainersSyncRoot
                 synchronized (socketContainersSyncRoot)
                 {
-                    MergingDatagramSocket2.this.active = this;
+                    MergingDatagramSocket3.this.active = this;
                     if (logger.isLoggable(Level.FINE))
                     {
                         logger.fine("Switching to new active socket: "
@@ -1064,7 +1064,7 @@ public class MergingDatagramSocket2
       thread.interrupt();
       if (remove)
       {
-        MergingDatagramSocket2.this.doRemove(getSocket());
+        MergingDatagramSocket3.this.doRemove(getSocket());
       }
     }
 
