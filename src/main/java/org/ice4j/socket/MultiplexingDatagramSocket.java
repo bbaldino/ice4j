@@ -237,10 +237,13 @@ public class MultiplexingDatagramSocket
       if (!doingReceive) {
         try
         {
-            System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() + " waiting for someone to do the receive");
+            System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
+                    " waiting for someone to do the receive");
             r = received.poll(remainingTimeout, TimeUnit.MILLISECONDS);
             if (r != null)
             {
+                System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
+                        " got data after waiting for someone to do the receive");
                 break;
             }
             else
@@ -257,14 +260,22 @@ public class MultiplexingDatagramSocket
           DatagramPacket c = MultiplexingXXXSocketSupport.clone(p, false);
           try
           {
+              System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
+                    " doing the actual receive");
               super.receive(c);
+              System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
+                      " got data from the actual received");
+
+          } catch (IOException e)
+          {
+            continue;
+          }
+          finally
+          {
               synchronized (receiveLock)
               {
                   doingReceive = false;
               }
-          } catch (IOException e)
-          {
-            continue;
           }
       }
     }
