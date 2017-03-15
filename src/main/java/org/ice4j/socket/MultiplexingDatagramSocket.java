@@ -136,7 +136,10 @@ public class MultiplexingDatagramSocket
         for (DatagramPacket p : toMove)
         {
             received.remove(p);
-            socket.received.offer(p);
+            if (!socket.received.offer(p))
+            {
+                System.out.println("BJB: No room to move packet to new multiplexed socket");
+            }
         }
     }
 
@@ -364,6 +367,7 @@ public class MultiplexingDatagramSocket
                   if (!socketReceived.offer(accepted ? MultiplexingXXXSocketSupport.clone(p, /* arraycopy */ true) : p))
                   {
                       ++numDroppedPackets;
+                      System.out.println("BJB: No room to accept packet in multiplexed socket");
                   }
 //          synchronized (socketReceived)
 //          {
@@ -383,6 +387,7 @@ public class MultiplexingDatagramSocket
           if (!received.offer(p))
           {
               ++numDroppedPackets;
+              System.out.println("BJB: No room to accept packet in multiplexed socket");
           }
         /*
         List<DatagramPacket> thisReceived = received;
