@@ -234,15 +234,19 @@ public class MultiplexingDatagramSocket
           doingReceive = true;
         }
       }
-      if (doingReceive) {
+      if (!doingReceive) {
         try
         {
-          r = received.poll(remainingTimeout, TimeUnit.MILLISECONDS);
-          synchronized (receiveLock)
-          {
-              doingReceive = false;
-          }
-          break;
+            System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() + " waiting for someone to do the receive");
+            r = received.poll(remainingTimeout, TimeUnit.MILLISECONDS);
+            if (r != null)
+            {
+                break;
+            }
+            else
+            {
+                continue;
+            }
         } catch (InterruptedException e)
         {
           continue;
@@ -254,6 +258,10 @@ public class MultiplexingDatagramSocket
           try
           {
               super.receive(c);
+              synchronized (receiveLock)
+              {
+                  doingReceive = false;
+              }
           } catch (IOException e)
           {
             continue;
