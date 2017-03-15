@@ -160,7 +160,7 @@ public class MultiplexingDatagramSocket
     return soTimeout;
   }
 
-  private void newReceiveHelper(ArrayBlockingQueue<DatagramPacket> received, DatagramPacket p)
+  private void receiveHelper(ArrayBlockingQueue<DatagramPacket> received, DatagramPacket p)
           throws IOException
   {
       long startTime = System.currentTimeMillis();
@@ -241,114 +241,6 @@ public class MultiplexingDatagramSocket
       MultiplexingXXXSocketSupport.copy(r, p);
   }
 
-  private void receiveHelper(List<DatagramPacket> received, DatagramPacket p, int timeout)
-      throws IOException
-  {
-    long startTime = System.currentTimeMillis();
-    DatagramPacket r = null;
-
-    do
-    {
-      long now = System.currentTimeMillis();
-      synchronized (received)
-      {
-        if (!received.isEmpty())
-        {
-          r = received.remove(0);
-          if (r != null)
-          {
-            break;
-          }
-        }
-      }
-
-      long remainingTimeout;
-      if (soTimeout > 0)
-      {
-        remainingTimeout = soTimeout - (now - startTime);
-        if (remainingTimeout <= 0L)
-        {
-          throw new SocketTimeoutException(Long.toString(remainingTimeout));
-        }
-      }
-      else
-      {
-        remainingTimeout = 1000L;
-      }
-
-      boolean wait;
-      synchronized(receiveLock)
-      {
-        if (doingReceive)
-        {
-          wait = true;
-        }
-        else
-        {
-          wait = false;
-          doingReceive = true;
-        }
-      }
-      try
-      {
-        if (wait)
-        {
-          synchronized(received)
-          {
-            if (received.isEmpty())
-            {
-              try
-              {
-                received.wait(remainingTimeout);
-              } catch (InterruptedException e)
-              {
-              }
-            }
-            else
-            {
-              received.notifyAll();;
-            }
-          }
-          continue;
-        }
-
-        DatagramPacket c = MultiplexingXXXSocketSupport.clone(p, false);
-        /*
-        synchronized(receiveLock)
-        {
-          if (setReceiveBufferSize)
-          {
-            setReceiveBufferSize = false;
-            try
-            {
-              super.setReceiveBufferSize(receiveBufferSize);
-            } catch (Throwable t)
-            {
-              if (t instanceof ThreadDeath)
-              {
-                throw (ThreadDeath)t;
-              }
-            }
-          }
-        }
-        */
-        super.receive(c);
-        acceptBySocketsOrThis(c);
-      }
-      finally
-      {
-        synchronized(receiveLock)
-        {
-          if (!wait)
-          {
-            doingReceive = false;
-          }
-        }
-      }
-    } while(true);
-    MultiplexingXXXSocketSupport.copy(r, p);
-  }
-
   private void acceptBySocketsOrThis(DatagramPacket p)
   {
       boolean accepted = false;
@@ -394,7 +286,7 @@ public class MultiplexingDatagramSocket
       throws IOException
   {
       //System.out.println("BJB: " + Thread.currentThread().getName() + " reading from multiplexing socket " + hashCode());
-      newReceiveHelper(received, p);
+      receiveHelper(received, p);
       //System.out.println("BJB: " + Thread.currentThread().getName() + " read from multiplexing socket " + hashCode());
   }
 
@@ -402,7 +294,7 @@ public class MultiplexingDatagramSocket
       throws IOException
   {
       //System.out.println("BJB: " + Thread.currentThread().getName() + " reading from multiplexed socket " + multiplexed.hashCode());
-      newReceiveHelper(multiplexed.received, p);
+      receiveHelper(multiplexed.received, p);
       //System.out.println("BJB: " + Thread.currentThread().getName() + " read from multiplexed socket " + multiplexed.hashCode());
   }
 
