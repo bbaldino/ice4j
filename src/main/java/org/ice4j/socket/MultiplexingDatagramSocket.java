@@ -131,11 +131,15 @@ public class MultiplexingDatagramSocket
         }
     }
 
-    for (DatagramPacket p : toMove)
+    if (toMove != null)
     {
-        received.remove(p);
-        socket.received.offer(p);
+        for (DatagramPacket p : toMove)
+        {
+            received.remove(p);
+            socket.received.offer(p);
+        }
     }
+
 
     /*
     synchronized (thisReceived)
