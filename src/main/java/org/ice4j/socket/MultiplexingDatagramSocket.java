@@ -352,12 +352,15 @@ public class MultiplexingDatagramSocket
   private void acceptBySocketsOrThis(DatagramPacket p)
   {
       boolean accepted = false;
+      System.out.println("BJB: Checking if any multiplexed sockets will take packet");
       synchronized (sockets)
       {
           for (MultiplexedDatagramSocket socket : sockets)
           {
+              System.out.println("BJB: Checking if socket with filter " + socket.getFilter().getClass().getName() + " will take packet");
               if (socket.getFilter().accept(p))
               {
+                  System.out.println("BJB: socket with filter " + socket.getFilter().getClass().getName() + " will take packet!");
                   ArrayBlockingQueue<DatagramPacket> socketReceived = socket.received;
 
                   if (!socketReceived.offer(accepted ? MultiplexingXXXSocketSupport.clone(p, /* arraycopy */ true) : p))
