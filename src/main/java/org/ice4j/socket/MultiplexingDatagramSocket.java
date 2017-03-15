@@ -7,6 +7,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Created by brian on 3/9/17.
@@ -199,16 +200,32 @@ public class MultiplexingDatagramSocket
   }
 
   private void newReceiveHelper(ArrayBlockingQueue<DatagramPacket> received, DatagramPacket p)
+          throws IOException
   {
     long startTime = System.currentTimeMillis();
     DatagramPacket r = null;
 
     while (true) {
-      // Check if there's already a packet waiting
+        long now = System.currentTimeMillis();
+
+        // Check if there's already a packet waiting
       r = received.poll();
       if (r != null) {
         break;
       }
+        long remainingTimeout;
+        if (soTimeout > 0)
+        {
+            remainingTimeout = soTimeout - (now - startTime);
+            if (remainingTimeout <= 0L)
+            {
+                throw new SocketTimeoutException(Long.toString(remainingTimeout));
+            }
+        }
+        else
+        {
+            remainingTimeout = 1000L;
+        }
 
       // If there isn't a packet waiting yet, check if the receive is already being done
       boolean wait;
@@ -222,7 +239,7 @@ public class MultiplexingDatagramSocket
       if (doingReceive) {
         try
         {
-          r = received.take();
+          r = received.poll(remainingTimeout, TimeUnit.MILLISECONDS);
           break;
         } catch (InterruptedException e)
         {
