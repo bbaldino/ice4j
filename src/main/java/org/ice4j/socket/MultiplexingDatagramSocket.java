@@ -218,12 +218,12 @@ public class MultiplexingDatagramSocket
           }
           else
           {
-              DatagramPacket c = MultiplexingXXXSocketSupport.clone(p, false);
+              r = MultiplexingXXXSocketSupport.clone(p, false);
               try
               {
                   System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
                           " doing the actual receive");
-                  super.receive(c);
+                  super.receive(p);
                   System.out.println("BJB: MultiplexingSocket thread " + Thread.currentThread().getName() +
                           " got data from the actual received");
                   break;
